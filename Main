@@ -1,1 +1,5 @@
-
+if game.PlaceId == 72920620366355 then
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/O1"))()
+else
+    print("Game not allowed")
+end
