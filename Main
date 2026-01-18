@@ -3,9 +3,11 @@ local HttpService = game:GetService("HttpService")
 
 local GameId = game.GameId
 
-local OperationOne = {
-    Id = 72920620366355,
-    GitHubLink = "https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/OperationOne"
+local Games = {
+    OperationOne = {
+        Id = 72920620366355,
+        GitHubLink = "https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/OperationOne"
+    }
 }
 
 local function LoadScript(url)
@@ -18,12 +20,9 @@ local function LoadScript(url)
     end
 end
 
-if GameId == OperationOne.Id then
-    LoadScript(OperationOne.GitHubLink)
-elseif GameId == OperationTwo.Id then
-    LoadScript(OperationTwo.GitHubLink)
-elseif GameId == OperationThree.Id then
-    LoadScript(OperationThree.GitHubLink)
-else
-    warn("No script found for this Game ID:", GameId)
+for name, data in pairs(Games) do
+    if GameId == data.Id then
+        LoadScript(data.GitHubLink)
+        return
+    end
 end
