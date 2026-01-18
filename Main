@@ -1,7 +1,7 @@
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
-local GameId = game.GameId
+local PlaceId = game.PlaceId
 
 local Games = {
     OperationOne = {
@@ -21,8 +21,10 @@ local function LoadScript(url)
 end
 
 for name, data in pairs(Games) do
-    if GameId == data.Id then
+    if PlaceId == data.Id then
         LoadScript(data.GitHubLink)
         return
     end
 end
+
+warn("No script found for this PlaceId:", PlaceId)
