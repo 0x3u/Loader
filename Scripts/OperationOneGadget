@@ -1,158 +1,198 @@
--- ESP Library for Drone tracking
-local Esp = {
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local pingId = {
+    Drone = "rbxassetid://95428092249797",
+    Camera = "rbxassetid://70956972762553"
+}
+
+local pingColor = {
+    Drone = Color3.fromRGB(0, 100, 200),
+    Camera = Color3.fromRGB(150, 150, 150)
+}
+
+local EspTable = {
     Drone = {
-        _enabled = false,
-        Color = Color3.fromRGB(255, 50, 50),  -- Bright red color
-        Size = 4  -- Dot size in pixels
+        Enabled = false,
+        Connections = {},
+        PingObjects = {}
+    },
+    Camera = {
+        Enabled = false,
+        Connections = {},
+        PingObjects = {}
     }
 }
 
--- Store ESP objects and connections
-local trackedDrones = {}
-local espConnections = {}
-
--- Drawing utility functions
-local function createDot()
-    local dot = Drawing.new("Circle")
-    dot.Transparency = 1
-    dot.Thickness = 1
-    dot.Filled = true
-    dot.Visible = false
-    return dot
+local function createPingObject(gadgetType, parent, model)
+    local pingModule = ReplicatedStorage.Modules.Effects.PingObject
+    if not pingModule then return end
+    
+    local pingClone = pingModule:Clone()
+    pingClone.Parent = parent
+    
+    pingClone.Adornee = model
+    pingClone.Enabled = true
+    
+    pingClone.Frame.BackgroundColor3 = pingColor[gadgetType]
+    pingClone.Arrow.ImageColor3 = pingColor[gadgetType]
+    pingClone.Frame.ImageLabel.Image = pingId[gadgetType]
+    
+    return pingClone
 end
 
--- Main ESP update function
-local function updateESP()
-    for _, droneData in pairs(trackedDrones) do
-        if droneData.model and droneData.model.PrimaryPart and droneData.dot then
-            local camera = workspace.CurrentCamera
-            local primaryPart = droneData.model.PrimaryPart
-            
-            -- Convert 3D position to 2D screen position
-            local vector, onScreen = camera:WorldToViewportPoint(primaryPart.Position)
-            
-            if onScreen then
-                droneData.dot.Position = Vector2.new(vector.X, vector.Y)
-                droneData.dot.Visible = Esp.Drone._enabled
-                droneData.dot.Color = Esp.Drone.Color
-                droneData.dot.Radius = Esp.Drone.Size
-            else
-                droneData.dot.Visible = false
+local function setupDroneESP()
+    for _, drone in ipairs(Workspace:GetChildren()) do
+        if drone.Name == "Drone" and drone:IsA("Model") then
+            if not EspTable.Drone.PingObjects[drone] then
+                local ping = createPingObject("Drone", Workspace.CurrentCamera, drone)
+                if ping then
+                    EspTable.Drone.PingObjects[drone] = ping
+                end
             end
         end
     end
 end
 
--- Find and track drones in workspace
-local function trackDrones()
-    -- Clear existing tracked drones
-    for _, droneData in pairs(trackedDrones) do
-        if droneData.dot then
-            droneData.dot:Remove()
-        end
-    end
-    trackedDrones = {}
-    
-    if not Esp.Drone._enabled then return end
-    
-    -- Find all drones in workspace
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj.Name == "Drone" and obj.PrimaryPart then
-            local dot = createDot()
-            
-            trackedDrones[obj] = {
-                model = obj,
-                dot = dot
-            }
-            
-            -- Listen for when the drone is removed
-            espConnections[obj] = obj.Destroying:Connect(function()
-                if trackedDrones[obj] and trackedDrones[obj].dot then
-                    trackedDrones[obj].dot:Remove()
+local function setupCameraESP()
+    for _, model in ipairs(Workspace:GetChildren()) do
+        if model:IsA("Model") then
+            local folder = model:FindFirstChildWhichIsA("Folder")
+            if folder then
+                local defaultCameras = folder:FindFirstChild("DefaultCameras")
+                if defaultCameras then
+                    for _, cameraModel in ipairs(defaultCameras:GetChildren()) do
+                        if cameraModel:IsA("Model") then
+                            if not EspTable.Camera.PingObjects[cameraModel] then
+                                local ping = createPingObject("Camera", Workspace.CurrentCamera, cameraModel)
+                                if ping then
+                                    EspTable.Camera.PingObjects[cameraModel] = ping
+                                    local camPart = cameraModel:FindFirstChild("Cam")
+                                    if camPart and ping:FindFirstChild("testname") then
+                                        ping.testname = camPart
+                                    end
+                                end
+                            end
+                        end
+                    end
                 end
-                trackedDrones[obj] = nil
-            end)
+            end
         end
     end
 end
 
--- Auto-detect new drones
-workspace.DescendantAdded:Connect(function(descendant)
-    if Esp.Drone._enabled and descendant:IsA("Model") and descendant.Name == "Drone" and descendant.PrimaryPart then
-        task.wait(0.1)
-        
-        -- Check if not already tracked
-        if not trackedDrones[descendant] then
-            local dot = createDot()
-            
-            trackedDrones[descendant] = {
-                model = descendant,
-                dot = dot
-            }
-            
-            -- Listen for when the drone is removed
-            espConnections[descendant] = descendant.Destroying:Connect(function()
-                if trackedDrones[descendant] and trackedDrones[descendant].dot then
-                    trackedDrones[descendant].dot:Remove()
-                end
-                trackedDrones[descendant] = nil
-            end)
+local function cleanupPings(pingTable)
+    for model, ping in pairs(pingTable) do
+        if ping and ping.Parent then
+            ping:Destroy()
+        end
+    end
+    pingTable = {}
+end
+
+EspTable.Drone.Connections.childAdded = Workspace.ChildAdded:Connect(function(child)
+    if EspTable.Drone.Enabled and child.Name == "Drone" and child:IsA("Model") then
+        local ping = createPingObject("Drone", Workspace.CurrentCamera, child)
+        if ping then
+            EspTable.Drone.PingObjects[child] = ping
         end
     end
 end)
 
--- Make Enabled property with automatic toggling
-do
-    local mt = {
-        __index = function(self, key)
-            if key == "Enabled" then
-                return self._enabled
-            end
-            return rawget(self, key)
-        end,
-        __newindex = function(self, key, value)
-            if key == "Enabled" then
-                local oldValue = self._enabled
-                self._enabled = value
-                
-                -- Auto toggle when Enabled changes
-                if value ~= oldValue then
-                    if value then
-                        -- Start tracking
-                        trackDrones()
-                        
-                        -- Create update connection
-                        if not espConnections.Update then
-                            espConnections.Update = game:GetService("RunService").RenderStepped:Connect(updateESP)
-                        end
-                    else
-                        -- Hide all dots
-                        for _, droneData in pairs(trackedDrones) do
-                            if droneData.dot then
-                                droneData.dot.Visible = false
-                            end
-                        end
-                        
-                        -- Clean up update connection
-                        if espConnections.Update then
-                            espConnections.Update:Disconnect()
-                            espConnections.Update = nil
-                        end
-                    end
-                end
-            else
-                rawset(self, key, value)
-            end
+EspTable.Drone.Connections.childRemoved = Workspace.ChildRemoved:Connect(function(child)
+    if EspTable.Drone.PingObjects[child] then
+        local ping = EspTable.Drone.PingObjects[child]
+        if ping and ping.Parent then
+            ping:Destroy()
         end
-    }
+        EspTable.Drone.PingObjects[child] = nil
+    end
+end)
+
+EspTable.Camera.Connections.childAdded = Workspace.ChildAdded:Connect(function(child)
+    if EspTable.Camera.Enabled and child:IsA("Model") then
+        task.wait(0.1)
+        setupCameraESP()
+    end
+end)
+
+EspTable.Camera.Connections.childRemoved = Workspace.ChildRemoved:Connect(function(child)
+    if EspTable.Camera.PingObjects[child] then
+        local ping = EspTable.Camera.PingObjects[child]
+        if ping and ping.Parent then
+            ping:Destroy()
+        end
+        EspTable.Camera.PingObjects[child] = nil
+    end
+end)
+
+local function updateESP(gadgetType, state)
+    EspTable[gadgetType].Enabled = state
     
-    setmetatable(Esp.Drone, mt)
+    if state then
+        if gadgetType == "Drone" then
+            setupDroneESP()
+        elseif gadgetType == "Camera" then
+            setupCameraESP()
+        end
+    else
+        cleanupPings(EspTable[gadgetType].PingObjects)
+    end
 end
 
--- Toggle function
-function Esp.Drone:Toggle()
-    self.Enabled = not self.Enabled
-    return self.Enabled
+local Esp = {
+    Drone = {
+        getEnabled = function()
+            return EspTable.Drone.Enabled
+        end,
+        setEnabled = function(state)
+            updateESP("Drone", state)
+        end
+    },
+    Camera = {
+        getEnabled = function()
+            return EspTable.Camera.Enabled
+        end,
+        setEnabled = function(state)
+            updateESP("Camera", state)
+        end
+    }
+}
+
+local DroneMetaTable = {}
+local CameraMetaTable = {}
+
+DroneMetaTable.__index = function(self, key)
+    if key == "Enabled" then
+        return EspTable.Drone.Enabled
+    end
+    return Esp.Drone[key]
 end
+
+DroneMetaTable.__newindex = function(self, key, value)
+    if key == "Enabled" then
+        updateESP("Drone", value)
+    else
+        rawset(self, key, value)
+    end
+end
+
+CameraMetaTable.__index = function(self, key)
+    if key == "Enabled" then
+        return EspTable.Camera.Enabled
+    end
+    return Esp.Camera[key]
+end
+
+CameraMetaTable.__newindex = function(self, key, value)
+    if key == "Enabled" then
+        updateESP("Camera", value)
+    else
+        rawset(self, key, value)
+    end
+end
+
+setmetatable(Esp.Drone, DroneMetaTable)
+setmetatable(Esp.Camera, CameraMetaTable)
 
 return Esp
