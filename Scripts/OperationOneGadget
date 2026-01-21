@@ -1,1 +1,161 @@
+-- ESP Library for Drone tracking
+local Esp = {
+    Drone = {
+        _enabled = false,
+        Color = Color3.fromRGB(255, 50, 50),  -- Bright red color
+        Size = 4  -- Dot size in pixels
+    }
+}
 
+-- Store ESP objects and connections
+local trackedDrones = {}
+local espConnections = {}
+
+-- Make Enabled property with automatic toggling
+do
+    local mt = {
+        __index = function(self, key)
+            if key == "Enabled" then
+                return self._enabled
+            end
+            return rawget(self, key)
+        end,
+        __newindex = function(self, key, value)
+            if key == "Enabled" then
+                local oldValue = self._enabled
+                self._enabled = value
+                
+                -- Auto toggle when Enabled changes
+                if value ~= oldValue then
+                    if value then
+                        -- Start tracking
+                        trackDrones()
+                        
+                        -- Create update connection
+                        if not espConnections.Update then
+                            espConnections.Update = game:GetService("RunService").RenderStepped:Connect(updateESP)
+                        end
+                    else
+                        -- Hide all dots
+                        for _, droneData in pairs(trackedDrones) do
+                            if droneData.dot then
+                                droneData.dot.Visible = false
+                            end
+                        end
+                        
+                        -- Clean up update connection
+                        if espConnections.Update then
+                            espConnections.Update:Disconnect()
+                            espConnections.Update = nil
+                        end
+                    end
+                end
+            else
+                rawset(self, key, value)
+            end
+        end
+    }
+    
+    setmetatable(Esp.Drone, mt)
+end
+
+-- Drawing utility functions
+local function createDot()
+    local dot = Drawing.new("Circle")
+    dot.Transparency = 1
+    dot.Thickness = 1
+    dot.Filled = true
+    dot.Visible = false
+    return dot
+end
+
+-- Main ESP update function
+local function updateESP()
+    for _, droneData in pairs(trackedDrones) do
+        if droneData.model and droneData.model.PrimaryPart and droneData.dot then
+            local camera = workspace.CurrentCamera
+            local primaryPart = droneData.model.PrimaryPart
+            
+            -- Convert 3D position to 2D screen position
+            local vector, onScreen = camera:WorldToViewportPoint(primaryPart.Position)
+            
+            if onScreen then
+                droneData.dot.Position = Vector2.new(vector.X, vector.Y)
+                droneData.dot.Visible = Esp.Drone.Enabled
+                droneData.dot.Color = Esp.Drone.Color
+                droneData.dot.Radius = Esp.Drone.Size
+            else
+                droneData.dot.Visible = false
+            end
+        end
+    end
+end
+
+-- Find and track drones in workspace
+local function trackDrones()
+    -- Clear existing tracked drones
+    for _, droneData in pairs(trackedDrones) do
+        if droneData.dot then
+            droneData.dot:Remove()
+        end
+    end
+    trackedDrones = {}
+    
+    if not Esp.Drone.Enabled then return end
+    
+    -- Find all drones in workspace
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj.Name == "Drone" and obj.PrimaryPart then
+            local dot = createDot()
+            
+            trackedDrones[obj] = {
+                model = obj,
+                dot = dot
+            }
+            
+            -- Listen for when the drone is removed
+            espConnections[obj] = obj.Destroying:Connect(function()
+                if trackedDrones[obj] and trackedDrones[obj].dot then
+                    trackedDrones[obj].dot:Remove()
+                end
+                trackedDrones[obj] = nil
+            end)
+        end
+    end
+end
+
+-- Auto-detect new drones
+workspace.DescendantAdded:Connect(function(descendant)
+    if Esp.Drone.Enabled and descendant:IsA("Model") and descendant.Name == "Drone" and descendant.PrimaryPart then
+        task.wait(0.1)
+        
+        -- Check if not already tracked
+        if not trackedDrones[descendant] then
+            local dot = createDot()
+            
+            trackedDrones[descendant] = {
+                model = descendant,
+                dot = dot
+            }
+            
+            -- Listen for when the drone is removed
+            espConnections[descendant] = descendant.Destroying:Connect(function()
+                if trackedDrones[descendant] and trackedDrones[descendant].dot then
+                    trackedDrones[descendant].dot:Remove()
+                end
+                trackedDrones[descendant] = nil
+            end)
+        end
+    end
+end)
+
+-- Toggle function
+function Esp.Drone:Toggle()
+    self.Enabled = not self.Enabled
+    return self.Enabled
+end
+
+-- The library is already initialized, no need to call Init()
+-- Just use Esp.Drone.Enabled = true/false
+
+return Esp
