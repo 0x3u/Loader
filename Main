@@ -7,6 +7,10 @@ local Games = {
     OperationOne = {
         Id = 72920620366355,
         GitHubLink = "https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/OperationOne"
+    },
+    Flick = {
+        Id = 136801880565837,
+        GitHubLink = "https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/Flick"
     }
 }
 
