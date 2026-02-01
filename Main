@@ -15,6 +15,10 @@ local Games = {
     TapSimulator = {
         Id = 75992362647444,
         GitHubLink = "https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/TapSimulator"
+    },
+    EscapeTsunamiForBrainrots = {
+        Id = 131623223084840,
+        GitHubLink = "https://raw.githubusercontent.com/0x3u/Loader/refs/heads/main/Scripts/EscapeTsunamiForBrainrots"
     }
 }
 
